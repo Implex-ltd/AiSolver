@@ -40,10 +40,8 @@ class Ai:
         if x not in __loaded__:
             print("load", x)
             __loaded__[x] = InferenceSession(
-                x,
-                providers=[
-                    "CUDAExecutionProvider",
-                ],
+                x, # ['TensorrtExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']
+                providers=['TensorrtExecutionProvider'],
             )
 
         self.session = __loaded__[x]
@@ -170,7 +168,6 @@ def predict(
         )
         prediction = task.json()["answers"]
         result = {}
-        print(question)
         qa = question.split("on the ")[1].replace(" ", "_")
 
         print("prediction:", qa, prediction)
@@ -238,7 +235,6 @@ def predict(
                 "apikey": "rorm-8473d243-790d-9184-3fa2-76e4ff8424df",
             },
         )
-        print(task.text)
         prediction = task.json()["answers"]
         return prediction
 
@@ -275,7 +271,7 @@ __lock__ = threading.Lock()
 def saves(string, prompt):
     __lock__.acquire()
     with open("./hash.csv", "a+") as ff:
-        ff.write(f"{string},{prompt}\n")
+        ff.write(f"{string},{prompt.split('a ')[1].replace(' ', '_')}\n")
     __lock__.release()
 
 
@@ -314,6 +310,7 @@ class Task(Ai):
         if data["task_type"] == Task.AREA_SELECT:
             qa = data["question"].split("Please click on the ")[1].replace(" ", "_")
 
+        print(qa)
         qa += ".onnx"
         if qa not in __models__:
             return False
@@ -328,7 +325,6 @@ class Task(Ai):
             return {"success": False, "data": {"error": "invalid task_type"}}
 
         if data["task_type"] == Task.BINARY:
-            t = time.time()
             if not self.parse_question(data):
                 return {"success": False, "data": {"error": "model not added yet"}}
 
@@ -350,12 +346,8 @@ class Task(Ai):
                     else:
                         return "false"
 
-            num_threads = min(concurrent.futures.thread.ThreadPoolExecutor()._max_workers, len(data["tasklist"]/2))
-            with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
-                task_results = list(executor.map(process_task, data["tasklist"]))
-
-            for idx, task in enumerate(data["tasklist"]):
-                answer[task["task_key"]] = task_results[idx]
+            for t in data["tasklist"]:
+                answer[t["task_key"]] = process_task(t)
 
             return answer
 
@@ -441,6 +433,7 @@ def add_expense():
 
         # Log processing time and result
         print("Processing Time:", processing_time, "seconds")
+        print(r)
 
         response = app.response_class(
             response=json.dumps({"success": True, "data": r}),
